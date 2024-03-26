@@ -1,9 +1,12 @@
 import os
 import madmom
 import librosa
-from madmom.features.beats import BeatTrackingProcessor, DBNBeatTrackingProcessor
+import soundfile as sf
+from madmom.features.beats import BeatTrackingProcessor, RNNBeatProcessor
 import numpy as np
 import matplotlib.pyplot as plt
+import mir_eval
+import csv
 
 def visualize_beats(audio_path, algorithm_beats, sample_rate):
   """
@@ -32,19 +35,37 @@ def visualize_beats(audio_path, algorithm_beats, sample_rate):
   # Display the plot
   plt.show()
 
+def save_f_measure_scores(f_measure_data):
+    # Create directory if it doesn't exist
+    #os.makedirs(os.path.dirname("f_measure_results.csv"), exist_ok=True)
+    output_file = "f_measure_results.csv"
+
+    # Open the CSV file for writing
+    with open(output_file, "w") as csvfile:
+        writer = csv.writer(csvfile)
+
+        # Write header row
+        writer.writerow(["Genre", "Average F-measure"])
+
+        # Write genre-wise and overall average scores
+        for genre, score in f_measure_data.items():
+            writer.writerow([genre, score])
+
+        writer.writerow(["Overall", f_measure_data["overall"]])
+
+    print(f"F-measure scores saved to {output_file}")
 
 
 
 def calculate_beats(audio_file_path):
-    # Load audio data using librosa
-    print(audio_file_path)
+    
     audio, sample_rate = librosa.load(audio_file_path, sr=None)  # Assuming you have librosa installed
-
-    # Use DBNBeatTrackingProcessor (example)
-    proc = DBNBeatTrackingProcessor(observation_lambda=0.1, correct=True, fps=100)
-    act = proc(audio)  # Pass the loaded audio data (audio)
+        
+    proc = BeatTrackingProcessor(fps=100)
+    act = RNNBeatProcessor()(audio)  # Pass the loaded audio data (audio)
     beats = proc(act)
-    return beats    
+    return beats
+      
 
 def load_beats(file_path):
     with open(file_path, 'r') as file:
@@ -65,6 +86,12 @@ def extract_genre_and_file_number(file_name):
 def evaluate_beat_tracking_algorithm(algorithm_beats_folder, ground_truth_beats_folder):
     genres = os.listdir(algorithm_beats_folder)
 
+    f_measure_data = {}
+    
+    total_f_measure_sum = 0
+
+    total_num_files = 0
+
     for genre in genres:
         genre_path = os.path.join(algorithm_beats_folder, genre)
         if not os.path.isdir(genre_path):
@@ -74,6 +101,9 @@ def evaluate_beat_tracking_algorithm(algorithm_beats_folder, ground_truth_beats_
 
         num_files = 0
 
+        genre_f_measure_sums = {}
+
+        
         for file_name in genre_files:
             genre_part, file_number = extract_genre_and_file_number(file_name)
             if genre_part is None or file_number is None:
@@ -93,7 +123,22 @@ def evaluate_beat_tracking_algorithm(algorithm_beats_folder, ground_truth_beats_
             algorithm_beats = calculate_beats(algorithm_audio_path)
             ground_truth_beats = load_beats(ground_truth_beats_path)
 
+            doubled_beats = []
+            for beat in algorithm_beats:
+                doubled_beats.append(beat * 2)
             
+            algorithm_beats_array = np.array(doubled_beats)
+            ground_truth_beats_array = np.array(ground_truth_beats)
+
+            reference_beats = mir_eval.beat.trim_beats(ground_truth_beats_array)
+            estimated_beats = np.array(mir_eval.beat.trim_beats(algorithm_beats_array))
+
+            f_measure = mir_eval.beat.f_measure(reference_beats, estimated_beats)
+            print(f"F-measure for {file_name}: {f_measure}")
+
+            genre_f_measure_sums[genre] = genre_f_measure_sums.get(genre, []) + [f_measure]
+            
+
             #visualize_beats(algorithm_audio_path, algorithm_beats_seconds, sample_rate)
 
             print(f"Audio File: {file_name}")
@@ -107,6 +152,18 @@ def evaluate_beat_tracking_algorithm(algorithm_beats_folder, ground_truth_beats_
             print(f'Genre: {genre}')
             print(f'Num Files: {num_files}')
             print('------------------------------')
+
+        for genre, f_measure_sum in genre_f_measure_sums.items():
+            genre_average = sum(f_measure_sum) / num_files
+            f_measure_data[genre] = genre_average
+            total_f_measure_sum += sum(f_measure_sum)
+
+
+        total_num_files += num_files
+
+    f_measure_data["overall"] = total_f_measure_sum / total_num_files
+
+    save_f_measure_scores(f_measure_data)
 
 # Replace with the paths to your folders containing the beat location files
 algorithm_beats_folder = 'Data/genres_original/'
