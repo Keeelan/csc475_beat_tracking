@@ -1,0 +1,7 @@
+# ignore all files in the Data directory
+Data/
+
+# ignore all files in gtzan_tempo_beat-main
+gtzan_tempo_beat-main/
+
+.ipynb_checkpoints
