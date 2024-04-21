@@ -1,0 +1,12 @@
+genre,acc1,acc2
+pop,0.72,0.91
+metal,0.63,0.88
+disco,0.93,0.98
+blues,0.65,0.78
+reggae,0.7,0.96
+classical,0.38,0.46
+rock,0.78,0.92
+hiphop,0.76,0.86
+country,0.59,0.95
+jazz,0.49,0.71
+overall,0.663,0.841
